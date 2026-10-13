@@ -1,0 +1,39 @@
+tests/gateway/test_setup_feishu.py
+  s_57a8fd9714fbc3::t_9f15e01284245e 198
+  s_57a8fd9714fbc3::t_952ab9894f5387 93
+  s_57a8fd9714fbc3::t_319f95f535de3a 113
+  s_57a8fd9714fbc3::t_724e55b8704cf9 139,145-181
+  s_57a8fd9714fbc3::t_f666d659949b93 229
+  s_57a8fd9714fbc3::t_da801a14741b7e 32-34
+plugins/platforms/feishu/adapter.py
+  s_57a8fd9714fbc3::t_c579a423d6da5e 4471-4480
+  s_57a8fd9714fbc3::t_3a67f27432390e 323
+  s_57a8fd9714fbc3::t_91f791bee42db8 3748-3761,3768-3771,3773
+  s_57a8fd9714fbc3::t_8496e52f891815 1420
+plugins/platforms/feishu/plugin.yaml
+  s_57a8fd9714fbc3::t_e010f6495dd681 37-40
+tests/gateway/test_feishu.py
+  s_57a8fd9714fbc3::t_a2ad2c7df4e88b 1424-1518
+website/i18n/zh-Hans/docusaurus-plugin-content-docs/current/user-guide/messaging/feishu.md
+  s_57a8fd9714fbc3::t_e7847be7b1cbc6 217-238
+  s_57a8fd9714fbc3::t_9e06e74cdb8990 523
+website/docs/user-guide/messaging/feishu.md
+  s_57a8fd9714fbc3::t_ccef104dec176c 255-276
+  s_57a8fd9714fbc3::t_080fb7428c5bb4 584
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.49-trip",
+  "base_commit_sha": "a64d62abbe9b0d13332818b348d8d9d0fa45869f",
+  "prompts": {},
+  "sessions": {
+    "s_57a8fd9714fbc3": {
+      "agent_id": {
+        "tool": "hermes",
+        "id": "20261013_230800_1a5ad1",
+        "model": "qwen3.8-flash"
+      },
+      "human_author": "qihuichen <qihuichen@trip.com>"
+    }
+  }
+}
