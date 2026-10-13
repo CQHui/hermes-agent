@@ -320,6 +320,7 @@ class FeishuAdapterSettings:
     allow_bots: str = "none"  # "none" | "mentions" | "all"
     require_mention: bool = True
     allow_all_dm: bool = False  # resolved per-profile so multiplexed adapters honor their own .env
+    thread_reply: bool = False  # group-chat replies answer inside a Feishu topic (reply_in_thread)
 
 
 @dataclass
@@ -1416,6 +1417,7 @@ class FeishuAdapter(BasePlatformAdapter):
             default_group_policy=str(extra.get("default_group_policy", "")).strip().lower(),
             group_rules=group_rules, allow_bots=allow_bots, allow_all_dm=allow_all_dm,
             require_mention=_to_boolean(extra.get("require_mention", _get_scoped_secret("FEISHU_REQUIRE_MENTION", "true"))),
+            thread_reply=_to_boolean(extra.get("thread_reply", _get_scoped_secret("FEISHU_THREAD_REPLY", "false"))),
         )
 
     def _apply_settings(self, settings: FeishuAdapterSettings) -> None:
@@ -3743,14 +3745,32 @@ class FeishuAdapter(BasePlatformAdapter):
             logger.debug("[Feishu] Failed to fetch last message in thread %s: %s", thread_id, exc)
         return None
 
+    async def _wants_thread_reply(self, chat_id: str) -> bool:
+        """FEISHU_THREAD_REPLY gates on group chats only — a p2p DM hosts no Feishu topic.
+
+        The chat-info cache is warm by the time a reply goes out (the inbound that triggered
+        the turn fills it via ``get_chat_info``), so this is a dict hit on the hot path; a
+        cold lookup degrades to ``"dm"`` (plain quoted reply) if the API call fails.
+        """
+        if not getattr(self, "_thread_reply", False):
+            return False
+        if chat_id.startswith("feishu_user_id:") or chat_id.startswith("ou_"):
+            return False
+        info = await self.get_chat_info(chat_id)
+        return info.get("type") in {"group", "forum"}
+
     async def _send_raw_message(
         self, *, chat_id: str, msg_type: str, payload: str, reply_to: Optional[str], metadata: Optional[dict[str, Any]],
     ) -> Any:
         thread_id = (metadata or {}).get("thread_id")
         effective_reply_to = reply_to or ((metadata or {}).get("reply_to_message_id") if thread_id else None)
         if effective_reply_to:
+            # Outside an existing topic the thread_reply toggle upgrades the quoted reply to a
+            # topic reply: Feishu spawns a thread on the FIRST reply_in_thread=true reply to a
+            # threadless group message; continuation chunks anchored on the same message join it.
+            reply_in_thread = bool(thread_id) or await self._wants_thread_reply(chat_id)
             body = self._build_reply_message_body(
-                content=payload, msg_type=msg_type, reply_in_thread=bool(thread_id), uuid_value=str(uuid.uuid4()),
+                content=payload, msg_type=msg_type, reply_in_thread=reply_in_thread, uuid_value=str(uuid.uuid4()),
             )
             request = self._build_reply_message_request(effective_reply_to, body)
             return await self._run_blocking(self._client.im.v1.message.reply, request)
@@ -4447,6 +4467,16 @@ def interactive_setup() -> None:
     )
     save_env_value("FEISHU_GROUP_POLICY", "open" if group_idx == 0 else "disabled")
     print_info("Group chats enabled (bot must be @mentioned)." if group_idx == 0 else "Group chats disabled.")
+
+    if group_idx == 0:
+        thread_idx = prompt_choice(
+            "How should the bot answer in group chats?",
+            ["Quote-reply in the main chat (default)", "Reply inside a topic thread — each question spawns its own topic"],
+            0,
+        )
+        save_env_value("FEISHU_THREAD_REPLY", "true" if thread_idx == 1 else "false")
+        if thread_idx == 1:
+            print_info("Group replies will open/join a Feishu topic thread.")
 
     print_info("Leave blank to clear a previously saved home channel (cron / notifications).")
     home_channel = prompt("Home chat ID (optional, for cron/notifications)", password=False).strip()
