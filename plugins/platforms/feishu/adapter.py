@@ -3733,19 +3733,13 @@ class FeishuAdapter(BasePlatformAdapter):
     async def _send_raw_message(
         self, *, chat_id: str, msg_type: str, payload: str, reply_to: Optional[str], metadata: Optional[dict[str, Any]],
     ) -> Any:
-        from plugins.platforms.feishu.feishu_thread_reply import wants_thread_reply
+        from plugins.platforms.feishu.feishu_thread_reply import send_threaded_reply
         thread_id = (metadata or {}).get("thread_id")
         effective_reply_to = reply_to or ((metadata or {}).get("reply_to_message_id") if thread_id else None)
         if effective_reply_to:
-            # Outside an existing topic the thread_reply toggle upgrades the quoted reply to a
-            # topic reply: Feishu spawns a thread on the FIRST reply_in_thread=true reply to a
-            # threadless group message; continuation chunks anchored on the same message join it.
-            reply_in_thread = bool(thread_id) or await wants_thread_reply(self, chat_id)
-            body = self._build_reply_message_body(
-                content=payload, msg_type=msg_type, reply_in_thread=reply_in_thread, uuid_value=str(uuid.uuid4()),
+            return await send_threaded_reply(
+                self, chat_id=chat_id, msg_type=msg_type, payload=payload, reply_to=effective_reply_to, metadata=metadata,
             )
-            request = self._build_reply_message_request(effective_reply_to, body)
-            return await self._run_blocking(self._client.im.v1.message.reply, request)
         if thread_id:
             # reply→create fallback inside a topic: thread_id as receive_id keeps it in the topic.
             receive_id, receive_id_type = thread_id, "thread_id"

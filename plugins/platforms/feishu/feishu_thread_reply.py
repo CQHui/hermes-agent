@@ -1,20 +1,59 @@
 """Feishu topic-thread (话题) reply routing extracted from the adapter facade.
 
-Two helpers share one theme: where a reply lands relative to Feishu topics.
+Everything about *where a reply lands relative to Feishu topics* lives here:
 
-* ``wants_thread_reply`` — the ``FEISHU_THREAD_REPLY`` gate: group chats only, DMs never.
-* ``fetch_last_message_in_thread`` — reply-anchor lookup used when a topic send has no anchor.
+* ``send_threaded_reply`` — anchored reply with the ``FEISHU_THREAD_REPLY`` upgrade,
+  and the plain-quote degrade when the group rejects the topic form (230071/230072).
+* ``wants_thread_reply`` — the group-chat gate: DMs never thread.
+* ``fetch_last_message_in_thread`` — reply-anchor lookup for topic sends without one.
 
-Both take the adapter as data; this module must not import the facade at module level
+The module takes the adapter as data; it must not import the facade at module level
 (the facade late-imports these by topic inside its methods — see adapter.py).
 """
 
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
+
+# Feishu rejects a topic-form reply when the group settings disallow threads (230071)
+# or the anchor message is aggregated (230072) — the answer must still land, so it is
+# retried once as a plain quoted reply (the pre-toggle behavior).
+_THREAD_UNSUPPORTED_CODES = frozenset({230071, 230072})
+
+
+async def send_threaded_reply(
+    adapter: Any, *, chat_id: str, msg_type: str, payload: str, reply_to: str, metadata: Optional[dict[str, Any]],
+) -> Any:
+    """Reply anchored on ``reply_to``, upgraded to a topic when the toggle demands it.
+
+    Feishu spawns the topic on the FIRST ``reply_in_thread=true`` reply to a threadless
+    group message; continuation chunks anchored on the same message join it. A group that
+    rejects the topic form degrades to a plain quote instead of dropping the reply.
+    """
+    thread_id = (metadata or {}).get("thread_id")
+    reply_in_thread = bool(thread_id) or await wants_thread_reply(adapter, chat_id)
+    response = await _reply(adapter, reply_to=reply_to, msg_type=msg_type, payload=payload, thread=reply_in_thread)
+    if reply_in_thread and not adapter._response_succeeded(response):
+        code = getattr(response, "code", None)
+        if code in _THREAD_UNSUPPORTED_CODES:
+            logger.info(
+                "[Feishu] Topic reply to %s rejected in chat %s (code %s — group settings or aggregated "
+                "anchor); falling back to plain quote", reply_to, chat_id, code,
+            )
+            response = await _reply(adapter, reply_to=reply_to, msg_type=msg_type, payload=payload, thread=False)
+    return response
+
+
+async def _reply(adapter: Any, *, reply_to: str, msg_type: str, payload: str, thread: bool) -> Any:
+    body = adapter._build_reply_message_body(
+        content=payload, msg_type=msg_type, reply_in_thread=thread, uuid_value=str(uuid.uuid4()),
+    )
+    request = adapter._build_reply_message_request(reply_to, body)
+    return await adapter._run_blocking(adapter._client.im.v1.message.reply, request)
 
 
 async def wants_thread_reply(adapter: Any, chat_id: str) -> bool:

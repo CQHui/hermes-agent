@@ -128,6 +128,33 @@ class TestFeishuThreadReplyToggle(unittest.TestCase):
         self.assertNotIn("oc_chat", adapter._chat_info_cache)
 
     @patch.dict(os.environ, {}, clear=True)
+    def test_group_rejecting_threads_degrades_to_plain_quote(self):
+        """230071/230072 must retry once as a plain quoted reply — never drop the answer."""
+        from gateway.config import PlatformConfig
+        from plugins.platforms.feishu.adapter import FeishuAdapter
+
+        adapter = FeishuAdapter(PlatformConfig())
+        adapter._thread_reply = True
+        adapter._chat_info_cache = {"oc_chat": {"chat_id": "oc_chat", "name": "g", "type": "group"}}
+        requests = []
+
+        class _MessageAPI:
+            def reply(self, request):
+                requests.append(request)
+                if request.request_body.reply_in_thread:
+                    return SimpleNamespace(
+                        success=lambda: False, code=230071, msg="group does not support reply in thread", data=None,
+                    )
+                return SimpleNamespace(success=lambda: True, data=SimpleNamespace(message_id="om_reply"))
+
+        adapter._client = SimpleNamespace(im=SimpleNamespace(v1=SimpleNamespace(message=_MessageAPI())))
+        result = asyncio.run(adapter.send("oc_chat", "answer", reply_to="om_parent"))
+        self.assertTrue(result.success)
+        self.assertEqual(len(requests), 2)
+        self.assertTrue(requests[0].request_body.reply_in_thread)
+        self.assertFalse(requests[1].request_body.reply_in_thread)
+
+    @patch.dict(os.environ, {}, clear=True)
     def test_settings_load_from_extra(self):
         from gateway.config import PlatformConfig
         from plugins.platforms.feishu.adapter import FeishuAdapter
