@@ -270,6 +270,8 @@ platforms:
 
 Notes:
 - Applies to **group chats only**. Direct messages, `ou_…` open-id sends, and replies already inside an existing topic behave exactly as before.
+- Scope is **message-triggered replies**. Cron jobs, notifications and home-channel deliveries carry no reply anchor, so they always post to the main chat — a Feishu topic can only be spawned by a reply, and a bare create into `thread_id` is not a valid API call (see #78975).
+- First reply per group after a gateway restart pays one extra `im.v1.chat.get` round-trip to determine the chat type; every later reply uses the warm cache. If that lookup fails (API outage), the reply degrades to a plain quoted reply and the next reply retries — the toggle can never be left permanently inert by a transient failure.
 - Long answers are chunked; all chunks of one reply land in the same topic.
 - If the triggering message is withdrawn before the reply goes out, Hermes falls back to a normal top-level message (never a stray second topic).
 - `hermes setup feishu` asks for this preference during group-chat configuration.

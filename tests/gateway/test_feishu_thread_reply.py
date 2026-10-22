@@ -100,6 +100,34 @@ class TestFeishuThreadReplyToggle(unittest.TestCase):
         self.assertTrue(captured["request"].request_body.reply_in_thread)
 
     @patch.dict(os.environ, {}, clear=True)
+    def test_forum_chat_threaded_like_group(self):
+        """A topic-enabled group resolves to chat_type=forum; the toggle must thread it."""
+        adapter, captured = self._reply_capture_adapter(thread_reply=True, chat_type="forum")
+        asyncio.run(adapter.send("oc_chat", "answer", reply_to="om_parent"))
+        self.assertTrue(captured["request"].request_body.reply_in_thread)
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_cold_cache_chat_lookup_failure_degrades_to_quote(self):
+        """Chat-type unknown (API down) must fall back to the pre-PR quoted reply, not fail the send.
+
+        The fallback is not cached, so the next reply retries the lookup — a transient
+        outage can never leave the toggle permanently inert.
+        """
+        adapter, captured = self._reply_capture_adapter(thread_reply=True)
+        adapter._chat_info_cache = {}
+
+        class _FailingChatAPI:
+            def get(self, request):
+                raise RuntimeError("chat lookup unreachable")
+
+        adapter._client.im.v1.chat = _FailingChatAPI()
+        result = asyncio.run(adapter.send("oc_chat", "answer", reply_to="om_parent"))
+        self.assertTrue(result.success)
+        self.assertFalse(captured["request"].request_body.reply_in_thread)
+        # failure path must not poison the cache — the next send retries the lookup
+        self.assertNotIn("oc_chat", adapter._chat_info_cache)
+
+    @patch.dict(os.environ, {}, clear=True)
     def test_settings_load_from_extra(self):
         from gateway.config import PlatformConfig
         from plugins.platforms.feishu.adapter import FeishuAdapter
