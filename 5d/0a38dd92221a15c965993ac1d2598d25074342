@@ -1,0 +1,23 @@
+website/i18n/zh-Hans/docusaurus-plugin-content-docs/current/user-guide/messaging/feishu.md
+  s_d01f2ce8a214b1::t_72f70125709624 235-236
+website/docs/user-guide/messaging/feishu.md
+  s_d01f2ce8a214b1::t_b7732f9c70f6b6 273-274
+tests/gateway/test_feishu_thread_reply.py
+  s_d01f2ce8a214b1::t_c5778dd2643155 103-129
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.51-trip",
+  "base_commit_sha": "5d0a38dd92221a15c965993ac1d2598d25074342",
+  "prompts": {},
+  "sessions": {
+    "s_d01f2ce8a214b1": {
+      "agent_id": {
+        "tool": "hermes",
+        "id": "cron_3b1981b48003_20261021_125911",
+        "model": "qwen3.8-flash"
+      },
+      "human_author": "qihuichen <qihuichen@trip.com>"
+    }
+  }
+}
